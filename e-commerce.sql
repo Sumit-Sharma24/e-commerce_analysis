@@ -74,4 +74,69 @@ select
 round(((TotalSales - lag(TotalSales) over(order by Month asc))/lag(TotalSales) over(order by Month asc)) * 100, 2) as PercentChange
 from total_sales;
 
---
+-- average order value changes month-on-month
+with avg_sales as (
+	select
+	date_format(order_date, '%Y-%m') as Month,
+	round(avg(total_amount), 2) as AvgOrderValue
+	from orders
+	group by date_format(order_date, '%Y-%m')
+)
+select
+*,
+round(((AvgOrderValue - lag(AvgOrderValue) over(order by Month asc))), 2) as ChangeInValue
+from avg_sales;
+
+-- identify products with the fastest turnover rates
+select
+product_id,
+count(*) as SalesFrequency
+from orderdetails
+group by product_id
+order by SalesFrequency desc
+limit 5;
+
+-- low engagement products
+with finding_unique_customers as (
+    select
+    p.product_id,
+    p.name,
+    count(distinct c.customer_id) as UniqueCustomerCount
+    from customers as c
+    join orders as o
+    on c.customer_id = o.customer_id
+    join order_details as od
+    on o.order_id = od.order_id
+    join products as p
+    on od.product_id = p.product_id
+    group by p.product_id,
+    p.name
+)
+select
+*
+from finding_unique_customers
+where UniqueCustomerCount < 0.4 * (select count(customer_id) from customers);
+
+-- customer acquisition trend
+with first_order_date as (
+    select
+    customer_id,
+    min(order_date) as first_purchase_date
+    from orders
+    group by customer_id
+)
+select
+date_format(first_purchase_date, '%Y-%m') FirstPurchaseMonth,
+count(customer_id) as TotalNewCustomers
+from first_order_date
+group by date_format(first_purchase_date, '%Y-%m')
+order by FirstPurchaseMonth asc;
+
+-- peak sales period identification
+select
+date_format(order_date, '%Y-%m') as Month,
+sum(total_amount) as TotalSales
+from orders
+group by date_format(order_date, '%Y-%m')
+order by TotalSales desc
+limit 3;
